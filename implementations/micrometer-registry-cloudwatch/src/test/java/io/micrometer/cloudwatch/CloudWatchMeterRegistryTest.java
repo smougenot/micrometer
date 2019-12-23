@@ -58,7 +58,7 @@ class CloudWatchMeterRegistryTest {
 
     private final MockClock clock = new MockClock();
     private final CloudWatchMeterRegistry registry = spy(new CloudWatchMeterRegistry(config, clock, null));
-    private CloudWatchMeterRegistry.Batch registryBatch = registry.new Batch();
+    private final CloudWatchMeterAdapter registryBatch = CloudWatchMeterRegistry.defaultCustomizer().adapter(registry);
 
     @Test
     void metricData() {
@@ -79,34 +79,22 @@ class CloudWatchMeterRegistryTest {
     }
 
     @Test
-    void batchGetMetricName() {
-        Id id = new Id("name", Tags.empty(), null, null, Type.COUNTER);
-        assertThat(registry.new Batch().getMetricName(id, "suffix")).isEqualTo("name.suffix");
-    }
-
-    @Test
-    void batchGetMetricNameWhenSuffixIsNullShouldNotAppend() {
-        Id id = new Id("name", Tags.empty(), null, null, Type.COUNTER);
-        assertThat(registry.new Batch().getMetricName(id, null)).isEqualTo("name");
-    }
-
-    @Test
     void batchFunctionCounterData() {
         FunctionCounter counter = FunctionCounter.builder("myCounter", 1d, Number::doubleValue).register(registry);
         clock.add(config.step());
-        assertThat(registry.new Batch().functionCounterData(counter)).hasSize(1);
+        assertThat(registryBatch.functionCounterData(counter)).hasSize(1);
     }
 
     @Test
     void batchFunctionCounterDataShouldClampInfiniteValues() {
         FunctionCounter counter = FunctionCounter.builder("my.positive.infinity", Double.POSITIVE_INFINITY, Number::doubleValue).register(registry);
         clock.add(config.step());
-        assertThat(registry.new Batch().functionCounterData(counter).findFirst().get().getValue())
+        assertThat(registryBatch.functionCounterData(counter).findFirst().get().getValue())
                 .isEqualTo(CloudWatchUtils.MAXIMUM_ALLOWED_VALUE);
 
         counter = FunctionCounter.builder("my.negative.infinity", Double.NEGATIVE_INFINITY, Number::doubleValue).register(registry);
         clock.add(config.step());
-        assertThat(registry.new Batch().functionCounterData(counter).findFirst().get().getValue())
+        assertThat(registryBatch.functionCounterData(counter).findFirst().get().getValue())
                 .isEqualTo(-CloudWatchUtils.MAXIMUM_ALLOWED_VALUE);
     }
 
@@ -115,7 +103,7 @@ class CloudWatchMeterRegistryTest {
         Measurement measurement = new Measurement(() -> Double.NaN, Statistic.VALUE);
         List<Measurement> measurements = Arrays.asList(measurement);
         Meter meter = Meter.builder("my.meter", Meter.Type.GAUGE, measurements).register(this.registry);
-        assertThat(registry.new Batch().metricData(meter)).isEmpty();
+        assertThat(registryBatch.metricData(meter)).isEmpty();
     }
 
     @Test
@@ -125,7 +113,7 @@ class CloudWatchMeterRegistryTest {
         Measurement measurement3 = new Measurement(() -> 2d, Statistic.VALUE);
         List<Measurement> measurements = Arrays.asList(measurement1, measurement2, measurement3);
         Meter meter = Meter.builder("my.meter", Meter.Type.GAUGE, measurements).register(this.registry);
-        assertThat(registry.new Batch().metricData(meter)).hasSize(2);
+        assertThat(registryBatch.metricData(meter)).hasSize(2);
     }
 
     @Test
